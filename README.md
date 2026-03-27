@@ -73,6 +73,8 @@ http://localhost:3070/
 
 数据会持久化到 `docker/data/`（Compose 已做目录挂载）。
 
+生产建议：本 Compose 内置 Redis（用于存储 session），数据持久化到 `docker/redis-data/`。
+
 停止并删除容器：
 ```bash
 cd docker
@@ -105,6 +107,22 @@ REGISTER_BASE_URL=https://register.example.com
 # Session 加密密钥
 # 建议修改为随机的长字符串以提高安全性
 SESSION_SECRET=1c3561585f573c24596d81af7dbc1c2a6e085378b9eb4a3fb4bdbd096dacf7b6
+```
+
+### Session / 反向代理（生产推荐）
+
+```env
+# 生产环境建议使用 Redis 存储 session（Docker Compose 已内置 redis 服务）
+# 仅当你需要使用外部 Redis 时再改此值；默认（Docker 镜像内）为 redis://redis:6379
+REDIS_URL=redis://redis:6379
+
+# 如果你在 Nginx/Caddy/Traefik 等反向代理后面用 HTTPS 访问，请开启（否则 secure cookie 可能无法下发）
+TRUST_PROXY=true
+
+# cookie secure 开关（可选）
+# - 不设置：生产环境默认开启 secure cookie
+# - 设置为 false：允许纯 HTTP（不推荐生产，但某些内网场景需要）
+COOKIE_SECURE=true
 ```
 
 ### 管理员与安全配置（可选）

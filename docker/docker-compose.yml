@@ -6,6 +6,9 @@ services:
     image: tavern-register:local
     container_name: tavern-register
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       # 端口映射支持跟随 docker/.env 里的 PORT（默认 3070）
       - "${PORT:-3070}:${PORT:-3070}"
@@ -27,3 +30,16 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: tavern-register-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

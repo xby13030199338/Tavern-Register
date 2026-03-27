@@ -4,6 +4,9 @@ import session from 'express-session';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { RedisStore } from 'connect-redis';
+import { createClient } from 'redis';
+
 import { loadConfig } from './config.js';
 import { SillyTavernClient } from './sillyTavernClient.js';
 import { OAuthService } from './oauthService.js';
@@ -33,6 +36,20 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function parseBooleanEnv(value) {
+    if (value === undefined || value === null) {
+        return false;
+    }
+    const normalized = String(value).trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+}
+
+// 生产环境常见部署：TLS 在反向代理处终止，需要信任 X-Forwarded-* 才能正确识别 https（影响 secure cookie）
+const trustProxyEnabled = parseBooleanEnv(process.env.TRUST_PROXY);
+if (trustProxyEnabled) {
+    app.set('trust proxy', 1);
+}
+
 app.use(helmet({
     contentSecurityPolicy: false,
     originAgentCluster: false, // 禁用 Origin-Agent-Cluster 头，避免浏览器的 agent cluster 警告
@@ -61,17 +78,75 @@ if (process.env.NODE_ENV === 'production' && sessionSecret === 'tavern-register-
     // throw new Error('生产环境必须设置 SESSION_SECRET');
 }
 
-app.use(session({
+function resolveCookieSecure() {
+    // 显式指定优先：COOKIE_SECURE=true/false
+    const raw = process.env.COOKIE_SECURE;
+    if (raw !== undefined && String(raw).trim() !== '') {
+        return parseBooleanEnv(raw);
+    }
+    return process.env.NODE_ENV === 'production' || process.env.FORCE_HTTPS === 'true';
+}
+
+const cookieSecure = resolveCookieSecure();
+if (cookieSecure && process.env.NODE_ENV === 'production' && !trustProxyEnabled) {
+    console.warn('⚠️  提示：当前启用了 secure cookie（生产环境默认），但未开启 TRUST_PROXY。');
+    console.warn('⚠️  如果你在反向代理（Nginx/Caddy/Traefik）后面用 HTTPS 访问，请在环境变量中设置 TRUST_PROXY=true，否则可能无法下发 session cookie。');
+}
+
+// 生产推荐：使用 Redis 存储 session（避免 MemoryStore 警告、支持重启/扩容）
+const redisUrl = (process.env.REDIS_URL ?? '').trim();
+let sessionStore;
+let redisClient;
+if (redisUrl) {
+    redisClient = createClient({ url: redisUrl });
+    redisClient.on('error', (err) => {
+        console.error('Redis client error:', err);
+    });
+    try {
+        await redisClient.connect();
+        console.log('Redis connected for session store.');
+    } catch (error) {
+        console.error('Redis connect failed, aborting startup:', error);
+        process.exit(1);
+    }
+
+    const prefix = (process.env.SESSION_KEY_PREFIX ?? '').trim() || 'tavern-register:sess:';
+    sessionStore = new RedisStore({
+        client: redisClient,
+        prefix,
+    });
+
+    // 容器关闭时优雅退出
+    const shutdown = async () => {
+        try {
+            await redisClient?.quit();
+        } catch {
+            // ignore
+        } finally {
+            process.exit(0);
+        }
+    };
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+}
+
+const sessionOptions = {
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production' || process.env.FORCE_HTTPS === 'true',
+        secure: cookieSecure,
         httpOnly: true,
         maxAge: 30 * 60 * 1000, // 30 分钟
         sameSite: 'lax', // 增加CSRF保护
     },
-}));
+};
+
+if (sessionStore) {
+    sessionOptions.store = sessionStore;
+}
+
+app.use(session(sessionOptions));
 const publicDir = path.join(__dirname, '../public');
 const indexHtmlPath = path.join(publicDir, 'index.html');
 const registerHtmlPath = path.join(publicDir, 'register.html');
