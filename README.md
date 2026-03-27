@@ -51,12 +51,45 @@ chmod +x start.sh
 
 http://localhost:3070/
 
+Docker 启动（推荐）
+----
+如果你希望**不在宿主机安装 Node.js / npm**，可以直接用 Docker Compose 一键启动。
+
+> 说明：本仓库已提供 `docker/` 目录，进入该目录后执行 `docker compose up -d` 即可启动容器。
+
+```bash
+cd docker
+# 首次使用：在 docker/ 下准备 .env（Compose 会自动读取）
+cp ../.env.example .env
+# 然后按需编辑 docker/.env（例如端口、OAuth、邮箱、SillyTavern 地址等）
+docker compose up -d
+# 如果你改过代码或 Dockerfile，希望强制重建镜像，再用：
+# docker compose up -d --build
+```
+
+启动后访问：
+
+http://localhost:3070/
+
+数据会持久化到 `docker/data/`（Compose 已做目录挂载）。
+
+停止并删除容器：
+```bash
+cd docker
+docker compose down
+```
+
 有关生产部署（systemd / pm2 / Nginx 反向代理）请参阅上文的“服务器部署”小节，其中包含 systemd 单元示例、pm2 启动方法以及 Nginx 配置片段。
 
 配置说明
 ----
 
-项目所有的可配置项均在 `.env` 文件中。首次使用请将根目录下的 `.env.example` 文件复制并重命名为 `.env`，然后根据需要修改配置。
+项目所有的可配置项均在 `.env` 文件中：
+
+- **直接在宿主机运行（npm start / start.bat / start.sh）**：读取**仓库根目录**的 `.env`
+- **Docker Compose 运行（docker compose up）**：读取 `docker/.env`（因为 `docker/docker-compose.yml` 使用了 `env_file: .env`）
+
+首次使用请将 `.env.example` 复制并重命名为 `.env`，然后根据需要修改配置（Docker 场景请放到 `docker/.env`）。
 
 ### 基础服务配置
 
