@@ -965,10 +965,21 @@ app.post('/api/admin/login', (req, res) => {
         
         const adminPanelPath = config.adminPanelPath || '/admin';
         console.log(`[管理员登录] IP: ${clientIp}, 跳转路径: ${adminPanelPath}`);
-        
-        res.json({ 
-            success: true,
-            adminPanelPath: adminPanelPath,
+
+        // 关键：显式保存 session，避免在外部存储（如 Redis）场景下出现“刚登录就跳回登录页”的竞态
+        req.session.save((err) => {
+            if (err) {
+                console.error('[管理员登录] 保存 session 失败:', err);
+                return res.status(500).json({
+                    success: false,
+                    message: '登录失败（会话保存失败），请稍后重试',
+                });
+            }
+
+            res.json({
+                success: true,
+                adminPanelPath: adminPanelPath,
+            });
         });
     } else {
         // 登录失败，记录失败尝试
