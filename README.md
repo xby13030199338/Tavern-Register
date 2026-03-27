@@ -123,7 +123,30 @@ TRUST_PROXY=true
 # - 不设置：生产环境默认开启 secure cookie
 # - 设置为 false：允许纯 HTTP（不推荐生产，但某些内网场景需要）
 COOKIE_SECURE=true
+
+# session key 前缀（可选，多个环境共用同一个 Redis 时建议区分）
+SESSION_KEY_PREFIX=tavern-register:sess:
 ```
+
+如果你使用 **Nginx / Caddy / Traefik / CDN 回源** 之类的反向代理，并且管理员后台出现：
+
+- 登录提示成功，但立刻又跳回 `/admin/login`
+- OAuth / 管理员登录状态无法保持
+
+通常需要同时满足下面两点：
+
+1. 在 `.env` 中设置 `TRUST_PROXY=true`
+2. 反向代理正确传递原始协议头（例如 `X-Forwarded-Proto=https`）
+
+以 **Nginx** 为例，至少应包含：
+
+```nginx
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+否则在 `COOKIE_SECURE=true` 的生产环境下，Express 可能不会正确下发 session cookie，表现就是“登录成功但马上又回到登录页”。
 
 ### 管理员与安全配置（可选）
 
