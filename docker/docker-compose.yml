@@ -7,7 +7,8 @@ services:
     container_name: tavern-register
     restart: unless-stopped
     ports:
-      - "3070:3070"
+      # 端口映射支持跟随 docker/.env 里的 PORT（默认 3070）
+      - "${PORT:-3070}:${PORT:-3070}"
     env_file:
       # 直接读取 docker/.env
       - .env
@@ -21,7 +22,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3070/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch(`http://localhost:${process.env.PORT || 3070}/health`).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 3s
